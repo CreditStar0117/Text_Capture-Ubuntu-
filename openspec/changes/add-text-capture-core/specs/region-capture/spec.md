@@ -67,15 +67,31 @@ The captured image SHALL contain exactly the screen pixels under the selected re
 - **THEN** the selection stops at the left monitor's right edge
 
 ### Requirement: Capture works in X11 and Wayland sessions
-Region capture SHALL work in both Ubuntu on Xorg and Ubuntu on Wayland sessions, and the captured image SHALL include the content of native Wayland apps. If the desktop asks for permission to take screenshots, the user SHALL be asked no more than once. If permission is refused, the user SHALL be told that capture is unavailable and how to allow it.
+Region capture SHALL work in both Ubuntu on Xorg and Ubuntu on Wayland sessions, and the captured image SHALL include the content of native Wayland apps.
 
 #### Scenario: Native Wayland app content is captured
 - **WHEN** in a Wayland session the user selects text shown in a native Wayland app
 - **THEN** the captured image shows that text (not a black or empty area)
 
-#### Scenario: Screenshot permission refused
-- **WHEN** the desktop asks whether Text Capture may take screenshots and the user refuses
-- **THEN** no overlay is shown and the user gets a notification explaining that capture needs screenshot permission and how to grant it
+### Requirement: Screenshot permission is asked once, with the user's consent
+When the desktop requires permission before Text Capture may take screenshots, the first capture SHALL open a Text Capture window that explains why and lets the user bring up the desktop's own Allow/Deny prompt. Once allowed, later captures SHALL NOT ask again. If the user denies it, the user SHALL be told that capture is unavailable and how to be asked again.
+
+#### Scenario: First capture asks for permission
+- **WHEN** in a Wayland session the user triggers the first capture and screenshot permission has not been given
+- **THEN** a Text Capture window explains that screenshot permission is needed and offers Continue and Cancel
+- **AND** choosing Continue shows the desktop's Allow/Deny prompt
+
+#### Scenario: Permission allowed
+- **WHEN** the user allows screenshots in the desktop's prompt
+- **THEN** the capture overlay opens, and later captures start without any permission prompt
+
+#### Scenario: Permission refused
+- **WHEN** the user denies screenshots in the desktop's prompt
+- **THEN** no overlay is shown, the clipboard is unchanged, and the user gets a notification saying capture needs screenshot permission and that triggering a capture again asks again
+
+#### Scenario: Permission window cancelled
+- **WHEN** the permission window is open and the user chooses Cancel
+- **THEN** the window closes, no desktop prompt appears and the clipboard is unchanged
 
 ### Requirement: Screenshots are not kept on disk
 Screen images taken for a capture SHALL NOT remain on disk after the capture ends, and SHALL NOT be added to the user's Pictures folder or screenshot history.
