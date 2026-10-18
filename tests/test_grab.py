@@ -28,6 +28,13 @@ def test_create_grabber(qapp):
     assert isinstance(grab.create_grabber({"XDG_SESSION_TYPE": "wayland", "QT_QPA_PLATFORM": "xcb"}), grab.PortalGrabber)
 
 
+@pytest.mark.parametrize("stored, allowed", [("yes", True), ("no", False), (None, False)])
+def test_portal_grabber_allowed_only_with_stored_permission(qapp, monkeypatch, stored, allowed):
+    monkeypatch.setattr(grab, "screenshot_permission", lambda: stored)
+    assert grab.PortalGrabber().allowed() is allowed
+    assert grab.X11Grabber().allowed() is True
+
+
 # --- 4.5 geometry -----------------------------------------------------------------
 
 

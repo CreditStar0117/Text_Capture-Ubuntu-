@@ -6,16 +6,24 @@ Lets the user mark the exact area of the screen whose text they want, and turns 
 
 ## ADDED Requirements
 
-### Requirement: Capture shows a frozen image of the screen
-When a capture starts, the system SHALL cover every monitor with a still image of what that monitor showed at the moment of the trigger, with the whole image slightly dimmed. Other apps SHALL keep running underneath. The overlay only shows a still image and SHALL NOT pause any app.
+### Requirement: The screen stays live during capture
+When a capture starts, the system SHALL cover every monitor with a slightly dimmed, see-through overlay. The system SHALL NOT freeze the screen or replace it with a still image: other apps SHALL keep running, and their changes, such as a playing video, SHALL stay visible through the overlay. The selected area SHALL be read from the screen when the user releases the mouse button.
 
-#### Scenario: Overlay shows the screen as it was
+#### Scenario: Overlay dims the live screen
 - **WHEN** the user triggers a capture
-- **THEN** each monitor shows a dimmed still image of its contents at the moment of the trigger
+- **THEN** each monitor is slightly dimmed and still shows its live contents
 
-#### Scenario: Apps keep running during capture
+#### Scenario: Apps keep moving during capture
 - **WHEN** a video is playing and the user triggers a capture, waits five seconds, then cancels
-- **THEN** the video has kept playing for those five seconds and was not paused
+- **THEN** the video kept playing and its picture kept changing on screen for those five seconds
+
+#### Scenario: The selection is read when the drag ends
+- **WHEN** the text under the selected area changes after the capture was triggered but before the mouse button is released
+- **THEN** the captured image shows the text as it was when the button was released
+
+#### Scenario: The overlay is not in the captured image
+- **WHEN** the user completes a selection
+- **THEN** the captured image shows the screen's own pixels, without the overlay's dimming, border or labels
 
 ### Requirement: User selects a rectangle by dragging
 The user SHALL select a region by pressing the left mouse button and dragging. While dragging, the selected rectangle SHALL be shown undimmed with a visible border and its size in pixels. Releasing the button SHALL complete the selection.

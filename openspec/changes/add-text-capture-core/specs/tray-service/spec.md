@@ -16,7 +16,7 @@ While running, the app SHALL show an icon in the top-bar tray area. Clicking it 
 
 #### Scenario: Capture from the menu
 - **WHEN** the user chooses Capture in the tray menu
-- **THEN** the menu closes and a capture starts, and the menu itself does not appear in the frozen screen image
+- **THEN** the menu closes and a capture starts, and the menu has closed before the overlay opens
 
 #### Scenario: Tray area not available
 - **WHEN** the desktop has no tray area (for example, the AppIndicators extension is disabled)
