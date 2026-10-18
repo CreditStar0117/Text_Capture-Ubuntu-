@@ -1,0 +1,1 @@
+Warning: Low disk space on the home folder

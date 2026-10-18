@@ -6,16 +6,24 @@ Lets the user mark the exact area of the screen whose text they want, and turns 
 
 ## ADDED Requirements
 
-### Requirement: Capture shows a frozen image of the screen
-When a capture starts, the system SHALL cover every monitor with a still image of what that monitor showed at the moment of the trigger, with the whole image slightly dimmed. Other apps SHALL keep running underneath. The overlay only shows a still image and SHALL NOT pause any app.
+### Requirement: The screen stays live during capture
+When a capture starts, the system SHALL cover every monitor with a slightly dimmed, see-through overlay. The system SHALL NOT freeze the screen or replace it with a still image: other apps SHALL keep running, and their changes, such as a playing video, SHALL stay visible through the overlay. The selected area SHALL be read from the screen when the user releases the mouse button.
 
-#### Scenario: Overlay shows the screen as it was
+#### Scenario: Overlay dims the live screen
 - **WHEN** the user triggers a capture
-- **THEN** each monitor shows a dimmed still image of its contents at the moment of the trigger
+- **THEN** each monitor is slightly dimmed and still shows its live contents
 
-#### Scenario: Apps keep running during capture
+#### Scenario: Apps keep moving during capture
 - **WHEN** a video is playing and the user triggers a capture, waits five seconds, then cancels
-- **THEN** the video has kept playing for those five seconds and was not paused
+- **THEN** the video kept playing and its picture kept changing on screen for those five seconds
+
+#### Scenario: The selection is read when the drag ends
+- **WHEN** the text under the selected area changes after the capture was triggered but before the mouse button is released
+- **THEN** the captured image shows the text as it was when the button was released
+
+#### Scenario: The overlay is not in the captured image
+- **WHEN** the user completes a selection
+- **THEN** the captured image shows the screen's own pixels, without the overlay's dimming, border or labels
 
 ### Requirement: User selects a rectangle by dragging
 The user SHALL select a region by pressing the left mouse button and dragging. While dragging, the selected rectangle SHALL be shown undimmed with a visible border and its size in pixels. Releasing the button SHALL complete the selection.
@@ -67,15 +75,31 @@ The captured image SHALL contain exactly the screen pixels under the selected re
 - **THEN** the selection stops at the left monitor's right edge
 
 ### Requirement: Capture works in X11 and Wayland sessions
-Region capture SHALL work in both Ubuntu on Xorg and Ubuntu on Wayland sessions, and the captured image SHALL include the content of native Wayland apps. If the desktop asks for permission to take screenshots, the user SHALL be asked no more than once. If permission is refused, the user SHALL be told that capture is unavailable and how to allow it.
+Region capture SHALL work in both Ubuntu on Xorg and Ubuntu on Wayland sessions, and the captured image SHALL include the content of native Wayland apps.
 
 #### Scenario: Native Wayland app content is captured
 - **WHEN** in a Wayland session the user selects text shown in a native Wayland app
 - **THEN** the captured image shows that text (not a black or empty area)
 
-#### Scenario: Screenshot permission refused
-- **WHEN** the desktop asks whether Text Capture may take screenshots and the user refuses
-- **THEN** no overlay is shown and the user gets a notification explaining that capture needs screenshot permission and how to grant it
+### Requirement: Screenshot permission is asked once, with the user's consent
+When the desktop requires permission before Text Capture may take screenshots, the first capture SHALL open a Text Capture window that explains why and lets the user bring up the desktop's own Allow/Deny prompt. Once allowed, later captures SHALL NOT ask again. If the user denies it, the user SHALL be told that capture is unavailable and how to be asked again.
+
+#### Scenario: First capture asks for permission
+- **WHEN** in a Wayland session the user triggers the first capture and screenshot permission has not been given
+- **THEN** a Text Capture window explains that screenshot permission is needed and offers Continue and Cancel
+- **AND** choosing Continue shows the desktop's Allow/Deny prompt
+
+#### Scenario: Permission allowed
+- **WHEN** the user allows screenshots in the desktop's prompt
+- **THEN** the capture overlay opens, and later captures start without any permission prompt
+
+#### Scenario: Permission refused
+- **WHEN** the user denies screenshots in the desktop's prompt
+- **THEN** no overlay is shown, the clipboard is unchanged, and the user gets a notification saying capture needs screenshot permission and that triggering a capture again asks again
+
+#### Scenario: Permission window cancelled
+- **WHEN** the permission window is open and the user chooses Cancel
+- **THEN** the window closes, no desktop prompt appears and the clipboard is unchanged
 
 ### Requirement: Screenshots are not kept on disk
 Screen images taken for a capture SHALL NOT remain on disk after the capture ends, and SHALL NOT be added to the user's Pictures folder or screenshot history.

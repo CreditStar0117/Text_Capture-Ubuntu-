@@ -1,0 +1,6 @@
+Text Capture lets you select any part of the screen and copies the text
+inside it to the clipboard. It works in every application, including
+images, videos, games and remote desktops, because it reads pixels
+instead of asking the application for its text. Press the shortcut,
+drag a rectangle around the words you need, and paste them anywhere.
+Recognition happens on your computer and nothing is sent online.

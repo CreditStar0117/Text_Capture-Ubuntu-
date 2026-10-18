@@ -7,12 +7,12 @@ Lets the user start a screen-text capture from anywhere on the desktop with one 
 ## ADDED Requirements
 
 ### Requirement: Default capture shortcut is registered on first run
-On first run, the system SHALL register `Super+Q` as a system-wide shortcut that starts a capture, provided no other desktop shortcut already uses that key combination. The shortcut SHALL work in both X11 and Wayland sessions, whichever window has focus.
+On first run, the system SHALL register `Ctrl+Q` as a system-wide shortcut that starts a capture, provided no other desktop shortcut (including shortcuts of GNOME Shell extensions) already uses that key combination. The shortcut SHALL work in both X11 and Wayland sessions, whichever window has focus.
 
 #### Scenario: First run with a free key combination
-- **WHEN** the app runs for the first time and no desktop shortcut uses `Super+Q`
-- **THEN** a shortcut named "Text Capture" bound to `Super+Q` is registered
-- **AND** pressing `Super+Q` in any application starts a capture
+- **WHEN** the app runs for the first time and no desktop shortcut uses `Ctrl+Q`
+- **THEN** a shortcut named "Text Capture" bound to `Ctrl+Q` is registered
+- **AND** pressing `Ctrl+Q` in any application starts a capture
 
 #### Scenario: Shortcut works in a Wayland session
 - **WHEN** the user is logged into an Ubuntu on Wayland session and presses the capture shortcut while a native Wayland app has focus
@@ -26,7 +26,7 @@ On first run, the system SHALL register `Super+Q` as a system-wide shortcut that
 The system SHALL NOT change, remove or take over any keyboard shortcut it did not create. If the default key combination is already in use, the system SHALL skip binding it and tell the user once how to choose another combination.
 
 #### Scenario: Default key combination already taken
-- **WHEN** the app runs for the first time and another shortcut already uses `Super+Q`
+- **WHEN** the app runs for the first time and another shortcut already uses `Ctrl+Q`
 - **THEN** that other shortcut keeps working unchanged
 - **AND** the user gets a notification saying the capture shortcut was not bound and how to set one
 
