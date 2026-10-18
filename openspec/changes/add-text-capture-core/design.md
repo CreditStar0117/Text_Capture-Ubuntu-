@@ -9,7 +9,8 @@ The repository has no code yet (see proposal.md for motivation). The design is s
 - **No direct screen grabbing on Wayland.** Wayland clients cannot read other windows' pixels. Under Wayland, `QScreen::grabWindow` returns nothing, and an XWayland grab shows native Wayland windows as black.
 - **Tray icons need the AppIndicators extension.** Ubuntu enables `ubuntu-appindicators@ubuntu.com` by default, and it hosts StatusNotifierItem icons. Stock GNOME has no tray.
 - **Everything installs from apt** in 24.04: `python3-pyqt6` 6.6.1 (Qt 6.4.2, with QtDBus, QtNetwork, QtWidgets and QtTest), `qt6-wayland`, `tesseract-ocr` 5.3.4 with language packs, and `python3-pytest`.
-- **Users may already have custom shortcuts.** The dev machine has two (`<Control>1` and `<Control>q`). `<Super>q` is unbound in stock Ubuntu GNOME.
+- **Users may already have custom shortcuts.** The dev machine has two: `<Control>1` (Flameshot) and `<Control>q` (NormCap OCR).
+- **Shell extensions hold shortcuts too.** Stock Ubuntu 24.04's Ubuntu Dock binds `<Super>q` (`org.gnome.shell.extensions.dash-to-dock shortcut`), so Capture2Text's `Win+Q` equivalent is not available. The default is `<Control>q`, chosen by the project owner.
 
 ## Goals / Non-Goals
 
@@ -34,9 +35,9 @@ Qt provides the tray icon (`QSystemTrayIcon`, which uses StatusNotifierItem over
 - *Electron/Tauri* would blow the idle memory budget and add a non-apt runtime.
 
 ### D2. The hotkey is a GNOME custom keyboard shortcut that runs `text-capture --capture`
-On first run the app adds an entry to `org.gnome.settings-daemon.plugins.media-keys custom-keybindings`, with name "Text Capture", command `<absolute path>/text-capture --capture` and binding `<Super>q`. GNOME's own settings daemon handles the key in both X11 and Wayland. The entry shows up in Settings › Keyboard › Custom Shortcuts, which meets the "user can change it" requirement with no hotkey UI of our own.
-- **Ownership:** the entry lives at a dedicated dconf path, `…/custom-keybindings/text-capture/`, not a `customN` slot. The app can therefore find, update and remove only its own entry. The `custom-keybindings` list is read, our path appended if missing, and written back, so other entries are never touched.
-- **Conflict check:** before binding, read every binding in `org.gnome.desktop.wm.keybindings`, `org.gnome.shell.keybindings`, `org.gnome.mutter.keybindings`, `org.gnome.mutter.wayland.keybindings`, `org.gnome.settings-daemon.plugins.media-keys` and all existing custom keybindings. Normalize case and modifier order (`<Super>q` equals `<super>Q`). If the combination is taken, create the entry with an empty binding, so it still appears in Settings, and notify the user.
+On first run the app adds an entry to `org.gnome.settings-daemon.plugins.media-keys custom-keybindings`, with name "Text Capture", command `<absolute path>/text-capture --capture` and binding `<Control>q`. GNOME's own settings daemon handles the key in both X11 and Wayland. The entry shows up in Settings › Keyboard › Custom Shortcuts, which meets the "user can change it" requirement with no hotkey UI of our own.
+- **Ownership:** the entry lives at a dedicated dconf path, `…/custom-keybindings/text-capture/`, not a `customN` slot. The app can therefore find, update and remove only its own entry. *Spike (task 3.1), X11:* `gsd-media-keys` loads and fires an entry at this path. When the key was already held (`<Super>q` by Ubuntu Dock), it only logged `Failed to grab accelerator`, so the app cannot detect a missed grab and must rely on the conflict check. The `custom-keybindings` list is read, our path appended if missing, and written back, so other entries are never touched.
+- **Conflict check:** before binding, read every binding in `org.gnome.desktop.wm.keybindings`, `org.gnome.shell.keybindings`, `org.gnome.mutter.keybindings`, `org.gnome.mutter.wayland.keybindings`, `org.gnome.settings-daemon.plugins.media-keys`, every installed `org.gnome.shell.extensions.*` schema, and all existing custom keybindings. Normalize case, modifier aliases and modifier order (`<Primary>Q` equals `<control>q`). If the combination is taken, create the entry with an empty binding, so it still appears in Settings, and notify the user.
 - **Register once:** a `hotkey/registered` flag in settings means the entry is only created on first run. If the user later deletes or rebinds it, the app respects that.
 - **How:** call the `gsettings` CLI with `subprocess`. It is always present on Ubuntu GNOME, and PyQt has no GSettings bindings.
 - *Alternatives:* an X11 `XGrabKey` (works on X11 only); the GlobalShortcuts portal (not available on GNOME 46); reading `/dev/input` (needs root or the `input` group, which is a security problem).
@@ -49,6 +50,12 @@ The running app listens on a `QLocalServer` at `$XDG_RUNTIME_DIR/text-capture.so
 Use `XDG_SESSION_TYPE` (with `WAYLAND_DISPLAY` as a fallback) to pick the grabber. Even if Qt falls back to XWayland because `qt6-wayland` is missing, the portal must still be used.
 - **X11:** `QScreen.grabWindow(0)` for each screen. It is synchronous and fast.
 - **Wayland:** call the `org.freedesktop.portal.Screenshot.Screenshot` method with `interactive=false` through QtDBus, wait for the `Request.Response` signal, load the PNG from the returned URI into memory, then **delete that exact file**. Delete it only if it is the URI returned for this request and was modified after the trigger. Some GNOME versions write portal screenshots into `~/Pictures/Screenshots`, and the `region-capture` spec forbids leftovers.
+- **App identity (verified on the dev machine):** the portal identifies an unsandboxed app by its systemd scope name. Run from a VS Code terminal, a request was attributed to `org.chromium.Chromium`; run in a scope named `app-io.github.CreditStar0117.TextCapture-<n>.scope`, it was attributed to `io.github.CreditStar0117.TextCapture`. The instance that becomes the server therefore re-executes itself once under `systemd-run --user --scope --unit=app-io.github.CreditStar0117.TextCapture-<pid>.scope`, unless its cgroup already names that ID (as it does when GNOME starts it from the app grid or autostart, whose desktop files are named after the ID). An environment guard prevents loops, and the step is skipped when `systemd-run` is missing.
+- **Permission (verified on the dev machine):** with no stored permission, a non-interactive request makes the portal call `AccessDialog`. GNOME Shell refuses that unless the caller is the focused app ("Only the focused app is allowed to show a system access dialog"), and the portal answers with response 2. A background app triggered by a hotkey is never focused, so the flow is:
+  1. On response 2, look up table `screenshot`, id `screenshot` in `org.freedesktop.impl.portal.PermissionStore`. If our ID has "yes", report a capture error. Otherwise (no entry or "no"), show a small focused permission window explaining why, with Continue and Cancel.
+  2. Continue first deletes a stored "no" for our ID (only on that explicit click), then repeats the request while the window still has focus, so GNOME shows its Allow/Deny dialog.
+  3. Allowed: the returned image contains our window, so it is discarded and its file deleted. The window closes and the real capture starts 300 ms later.
+  4. Denied: notify that capture needs screenshot permission and that triggering a capture again asks again.
 - The whole desktop is grabbed **before** any overlay is shown, so the overlay never appears in its own image. When the capture comes from the tray menu, it is delayed by 250 ms so the menu has closed first.
 - *Alternatives:* the ScreenCast portal + PipeWire (shows a monitor-picker dialog and needs GStreamer/PipeWire bindings); `org.gnome.Shell.Screenshot` called directly (restricted to allow-listed callers since GNOME 41); grabbing through XWayland (Wayland windows come out black).
 
@@ -59,7 +66,7 @@ For each `QScreen`, create a frameless, always-on-top window and show it full-sc
 
 ### D6. OCR with the Tesseract 5 CLI in a niced subprocess
 Run `nice -n 10 tesseract stdin stdout -l <lang> --psm 6 --dpi 300` through `QProcess`, with `OMP_THREAD_LIMIT=1`. The preprocessed PNG goes in through stdin, so no image touches disk. `QProcess` is asynchronous, so the UI never blocks, and it can be killed when the user cancels or the 15-second timeout hits.
-- **Preprocessing** (in Qt, before OCR): convert to grayscale; invert if the mean brightness is below 50%, because Tesseract's LSTM model does poorly on light-on-dark text; upscale with smooth scaling so the effective scale is about 3× at 100% display scale and 1.5× at 200%; add a 10-pixel border in the background colour. Exact factors and the PSM are tuned against the reference test set, not hard-coded from guesses.
+- **Preprocessing** (in Qt, before OCR): convert to grayscale; invert if the mean brightness is below 50%, because Tesseract's LSTM model does poorly on light-on-dark text; upscale with smooth scaling so the effective scale is about 3× at 100% display scale and 1.5× at 200%; add a 10-pixel border in the background colour. Exact factors and the PSM are tuned against the reference test set, not hard-coded from guesses. *Tuned (task 6.6):* upscale **2× at 100%** (so 1× at 200%) with **PSM 6** gave 100% character accuracy on the 26-image set (1,493 characters). 3× gave 99.7%, and 1× with PSM 3 gave 99.4%. A 1000 × 300 region takes about 0.6 s.
 - **Languages:** `tesseract --list-langs`, excluding `osd`, with a small table from code to display name (`eng` → English, `deu` → German, `chi_sim` → Chinese (Simplified), …) and the raw code as a fallback.
 - **Line breaks:** Tesseract separates lines with `\n` and paragraphs with a blank line. Normalization trims the text and collapses blank lines. With "Keep line breaks" off, lines within a paragraph are joined with single spaces. This is a pure function, so it is unit-tested directly.
 - *Alternatives:* pytesseract or tesserocr in-process (a hang can't be killed and a crash takes down the app; tesserocr isn't in apt); EasyOCR or PaddleOCR (PyTorch-sized dependencies, slow cold start, and they break the memory budget).
@@ -67,11 +74,11 @@ Run `nice -n 10 tesseract stdin stdout -l <lang> --psm 6 --dpi 300` through `QPr
 ### D7. Set the clipboard while the overlay still has focus
 On Wayland, a client can only set the selection using the serial of a recent input event while it has keyboard focus. Setting it after the overlay closes, when OCR is done but the app is unfocused, would fail silently. So the overlay stays open with a "Recognizing…" indicator until OCR finishes. Then `QClipboard.setText()` runs, and only then does the overlay close. Ownership is confirmed with `QClipboard.ownsClipboard()`. If that check fails and `wl-copy` is installed, it is used as a fallback. Otherwise the failure is reported. The app is long-running, so it keeps serving the clipboard after the overlay closes. On X11 the same order is used, so behaviour is the same in both sessions.
 
-### D8. Notifications through `org.freedesktop.Notifications` with QtDBus
-Call `Notify` directly instead of `QSystemTrayIcon.showMessage`, so notifications still work when there is no tray. Hints: `transient=true` (not kept in the message tray), `urgency=low` for results and `normal` for errors. `replaces_id` is reused, so rapid captures replace each other instead of stacking. GNOME banners never take keyboard focus.
+### D8. Notifications through `org.freedesktop.Notifications`
+Call `Notify` directly instead of `QSystemTrayIcon.showMessage`, so notifications still work when there is no tray. *Implementation note:* PyQt6's QtDBus marshals Python ints as `i` and lists as `av`, so it cannot produce the `u` and `as` arguments `Notify` requires (verified). The call is therefore made with `gdbus call` in an asynchronous `QProcess`, whose GVariant text format states the exact types. `gdbus` ships with GLib on every GNOME desktop. The body is HTML-escaped because GNOME renders notification bodies as markup. Hints: `transient=true` (not kept in the message tray), `urgency=low` for results and `normal` for errors. `replaces_id` is reused, so rapid captures replace each other instead of stacking. GNOME banners never take keyboard focus.
 
 ### D9. Settings and the autostart file
-`QSettings` in INI format at `~/.config/text-capture/text-capture.conf` holds `ocr/language`, `output/keep_line_breaks`, `output/notify`, `app/autostart` and `hotkey/registered`. Each change is written immediately with `sync()`. Turning "Start at login" on writes `~/.config/autostart/text-capture.desktop` with `Exec=<absolute path> --background`. Turning it off deletes that file.
+`QSettings` in INI format at `~/.config/text-capture/text-capture.conf` holds `ocr/language`, `output/keep_line_breaks`, `output/notify`, `app/autostart` and `hotkey/registered`. Each change is written immediately with `sync()`. Turning "Start at login" on writes `~/.config/autostart/io.github.CreditStar0117.TextCapture.desktop` with `Exec=<absolute path> --background`. The file name carries the app ID so the autostarted instance runs in a correctly named scope (D4). Turning it off deletes that file.
 
 ### D10. Idle behaviour is event-driven only
 While idle, nothing runs except the local-socket listener and the tray icon, with no timers and no polling. Overlay windows are created per capture and destroyed afterwards, so their image memory is freed. A top-level exception handler, plus a `try/finally` around each capture, always closes the overlays and notifies, which meets the `tray-service` "failures never leave the desktop blocked" requirement. Logs go to `$XDG_STATE_HOME/text-capture/text-capture.log`, capped at 1 MB with one backup.
@@ -89,18 +96,20 @@ text_capture/
   output.py       # clipboard + notifications (D7, D8)
   settings.py     # QSettings wrapper + autostart file (D9)
 scripts/install.sh  # apt deps, copy to ~/.local/share/text-capture,
-                    # launcher in ~/.local/bin, app-grid .desktop + icon; --uninstall
+                    # launcher in ~/.local/bin, app-grid .desktop + icon
+                    # (both named io.github.CreditStar0117.TextCapture); --uninstall
 tests/            # pytest; tests/data/ holds reference images + expected text
 ```
 `install.sh` runs `sudo apt install` only for missing packages and asks first. The GNOME shortcut and autostart entry use the launcher's absolute path, so they don't depend on `PATH`.
 
 ## Risks / Trade-offs
 
-- **[Risk] On Wayland, GNOME may show a one-time "Allow screenshots?" dialog for non-interactive portal screenshots.** → The permission store keeps the answer, so it is asked at most once. A refusal is detected from the portal response code and reported with instructions, per the spec.
+- **[Risk] GNOME's screenshot permission needs a focused app (confirmed, see D4).** → Handled by the one-time permission window. If a future GNOME changes the response codes or the store layout, the flow falls back to reporting a capture error rather than looping.
 - **[Risk] GNOME's portal screenshot may flash the screen or play a shutter sound.** → The app can't control this; it is accepted as cosmetic. If it is too disruptive, the ScreenCast portal (D4 alternative) is the follow-up.
 - **[Risk] Portal screenshots add latency (~150–400 ms), which eats into the 500 ms overlay budget.** → Measure on the dev machine early (task 4.4). If the budget is missed, show the overlay with a brief "capturing" state and fill in the image when it arrives.
 - **[Risk] Mixed-scale multi-monitor (e.g. 100% + 200%) and fractional scaling under Wayland can map portal image regions incorrectly.** → The mapping is a pure function and is unit-tested against the known GNOME layouts. It is also covered by the manual test matrix: 1×, 2×, 125% fractional, two monitors with mixed scales.
-- **[Risk] A dedicated dconf path (`…/custom-keybindings/text-capture/`) might not be listed by GNOME Settings, which expects `customN`.** → Verify early. If it isn't listed, use the first free `customN` slot and identify our entry by its command path.
+- **[Risk] A dedicated dconf path (`…/custom-keybindings/text-capture/`) might not be listed by GNOME Settings, which expects `customN`.** → It fires on X11 (task 3.1). Listing in Settings and firing on Wayland still need a check by hand. If it isn't listed, use the first free `customN` slot and identify our entry by its command path.
+- **[Trade-off] `Ctrl+Q` is the usual "Quit" shortcut in many apps (Firefox, VS Code, LibreOffice, Text Editor).** While GNOME holds it as a global shortcut, apps no longer receive it, so users must quit those apps another way. → Accepted by the project owner; the README states it, and the key can be changed in Settings.
 - **[Trade-off] Starting a Tesseract process for each capture costs ~100–200 ms to start and load the model.** → This is accepted for crash isolation and cancellation, and stays well inside the 2-second spec target.
 - **[Trade-off] Python + Qt idle memory (~70–100 MB) is heavier than C++.** → It is within the 150 MB spec limit and measured in testing. C++ remains the escape route.
 - **[Trade-off] With no tray (AppIndicators disabled), the only controls are the shortcut and the CLI.** → This is reported to the user once, per the spec.
@@ -111,5 +120,4 @@ This is a new project, so there is nothing to migrate. To deploy, run `scripts/i
 
 ## Open Questions
 
-- Does `xdg-desktop-portal-gnome` 46 skip the permission dialog for unsandboxed (host) apps? Both outcomes are already handled by the spec and D4. This only affects what the manual test should expect.
 - What are the best upscale factor and PSM (6 vs. 3) for real screen text? These are tuned against the reference set during implementation (D6) without affecting any spec.

@@ -1,0 +1,5 @@
+org.gnome.mutter.keybindings cancel-input-capture ['<Super><Shift>Escape']
+org.gnome.mutter.keybindings rotate-monitor ['XF86RotateWindows']
+org.gnome.mutter.keybindings switch-monitor ['<Super>p', 'XF86Display']
+org.gnome.mutter.keybindings toggle-tiled-left @as []
+org.gnome.mutter.keybindings toggle-tiled-right @as []
