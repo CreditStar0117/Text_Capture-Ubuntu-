@@ -1,0 +1,36 @@
+schema: spec-driven
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+context: |
+  Goal: a Capture2Text-style screen OCR tool for Ubuntu (hotkey, select a screen region, OCR it, copy the text to the clipboard).
+  Target Ubuntu 24.04 LTS with GNOME. Designs must address both X11 and Wayland sessions, since global hotkeys and screen capture differ between them.
+  The app runs continuously in the background and must never pause, freeze, steal focus from, or otherwise interrupt other running apps or the system.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

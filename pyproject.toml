@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "text-capture"
+version = "0.1.0"
+description = "Capture2Text-style screen OCR for Ubuntu: select a region, recognize its text, copy it to the clipboard."
+readme = "README.md"
+requires-python = ">=3.12"
+# Runtime dependencies come from apt, not PyPI (design D1):
+#   python3-pyqt6 qt6-wayland tesseract-ocr tesseract-ocr-eng
+dependencies = []
+
+[project.scripts]
+text-capture = "text_capture.__main__:main"
+
+[tool.setuptools]
+packages = ["text_capture"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
