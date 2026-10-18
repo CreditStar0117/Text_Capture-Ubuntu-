@@ -30,8 +30,8 @@ Status values: **Pass**, **Fail** (with a note), **To do**, or **Not testable** 
 
 | Measurement | Result | Limit | Status |
 |---|---|---|---|
-| Average CPU over one hour idle | *pending* | < 1% of one core | To do |
-| Resident memory (RSS) | 79 MB after start, 107 MB after several captures | < 150 MB | Pass so far |
+| Average CPU over one hour (09:15–10:15, normal desktop use, one capture in between) | 0.08% of one core (`pidstat -u -r -p <pid> 60 60`; busiest minute 3.55%, during the capture) | < 1% of one core | Pass |
+| Resident memory (RSS) | 107.7 MB average, 108 MB at the end, 131 MB peak (`VmHWM`) | < 150 MB | Pass |
 
 ## 10.3 Monitors and scaling
 

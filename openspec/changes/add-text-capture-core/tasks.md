@@ -68,7 +68,7 @@
 ## 10. Integration verification
 
 - [ ] 10.1 Run the manual test matrix in both Ubuntu on Xorg and Ubuntu on Wayland: hotkey → select → paste; Esc and right-click cancel; focus return; a video keeps playing during capture; second launch from the app grid gives no second icon; Capture from the tray menu does not capture the menu; ten relaunches give one shortcut entry. Verify by recording pass/fail for each spec scenario in `docs/manual-test-results.md`.
-- [ ] 10.2 Measure idle impact: one hour idle while working normally, sampling with `pidstat -p <pid> 60`, plus resident memory from `/proc/<pid>/status`. Verify that the recorded average CPU is under 1% and RSS under 150 MB in `docs/manual-test-results.md`.
+- [x] 10.2 Measure idle impact: one hour idle while working normally, sampling with `pidstat -p <pid> 60`, plus resident memory from `/proc/<pid>/status`. Verify that the recorded average CPU is under 1% and RSS under 150 MB in `docs/manual-test-results.md`.
 - [ ] 10.3 If a second monitor or a HiDPI/fractional setting is available, verify that a selection on each monitor and scale captures the right pixels. Record the results, or "not testable on this hardware", in `docs/manual-test-results.md`.
 - [ ] 10.4 Log out and back in with "Start at login" on and then off. Verify that the app is running only in the first case, and record this in `docs/manual-test-results.md`.
 - [ ] 10.5 Run `python3 -m pytest` and `openspec validate add-text-capture-core --strict`. Verify that both pass.
