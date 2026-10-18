@@ -28,6 +28,10 @@ class FakeGrabber(QObject):
     def __init__(self):
         super().__init__()
         self.calls = 0
+        self.permission_stored = True
+
+    def allowed(self):
+        return self.permission_stored
 
     def grab(self):
         self.calls += 1
@@ -54,8 +58,8 @@ class FakeJob(QObject):
 class TrackingSession(OverlaySession):
     instances = []
 
-    def __init__(self, shots, **kwargs):
-        super().__init__(shots, **kwargs)
+    def __init__(self, screens, **kwargs):
+        super().__init__(screens, **kwargs)
         TrackingSession.instances.append(self)
 
 
@@ -120,13 +124,19 @@ def rig(qapp, store):
     controller.finish()
 
 
-def start_capture(controller, grabber, shot):
+def start_capture(controller):
     controller.trigger()
     pump()
-    assert grabber.calls >= 1
-    grabber.grabbed.emit([shot])
-    pump()
     return TrackingSession.instances[-1]
+
+
+def select(session, grabber, shot, rect=Rect(10, 10, 200, 50)):
+    """Finish a drag on the first screen, then deliver the grab it causes."""
+    calls = grabber.calls
+    session.windows[0].selected.emit(rect)
+    pump(app.GRAB_SETTLE_MS + 50)
+    assert grabber.calls == calls + 1
+    grabber.grabbed.emit([shot])
 
 
 def summaries(notifier):
@@ -138,10 +148,10 @@ def summaries(notifier):
 
 def test_full_capture_copies_before_overlay_closes(rig, shot):
     controller, grabber, notifier, clipboard, order = rig
-    session = start_capture(controller, grabber, shot)
+    session = start_capture(controller)
     assert controller.state == controller.SELECTING and session.windows[0].isVisible()
 
-    session.windows[0].selected.emit(Rect(10, 10, 200, 50))
+    select(session, grabber, shot)
     job = FakeJob.instances[-1]
     assert job.started and job.language == "eng" and job.png.startswith(b"\x89PNG")
     assert controller.state == controller.RECOGNIZING
@@ -153,21 +163,40 @@ def test_full_capture_copies_before_overlay_closes(rig, shot):
     assert summaries(notifier) == ["'Text copied'"]
 
 
+def test_screen_is_grabbed_only_after_the_selection(rig, shot, monkeypatch):
+    controller, grabber, *_ = rig
+    seen = []
+    monkeypatch.setattr(app.ocr, "preprocess", lambda image, scale: seen.append((image, scale)) or image)
+    session = start_capture(controller)
+    assert grabber.calls == 0  # the overlay opens over the live screen; nothing is frozen
+
+    session.windows[0].selected.emit(Rect(10, 10, 200, 50))
+    assert controller.state == controller.GRABBING and grabber.calls == 0  # the overlay settles first
+    pump(app.GRAB_SETTLE_MS + 50)
+    assert grabber.calls == 1
+
+    shot.image.fill(QColor("white"))
+    shot.image.setPixelColor(10, 10, QColor("red"))  # what the screen shows at grab time
+    grabber.grabbed.emit([shot])
+    ((image, scale),) = seen
+    assert (image.width(), image.height(), scale) == (200, 50, 1.0)
+    assert image.pixelColor(0, 0) == QColor("red")
+
+
 def test_second_trigger_during_capture_is_ignored(rig, shot):
     controller, grabber, *_ = rig
-    start_capture(controller, grabber, shot)
+    start_capture(controller)
     controller.trigger()
     pump()
-    assert grabber.calls == 1
     assert len(TrackingSession.instances) == 1
 
 
 def test_exception_mid_capture_closes_overlays_and_next_trigger_works(rig, shot, monkeypatch):
     controller, grabber, notifier, clipboard, _ = rig
-    session = start_capture(controller, grabber, shot)
+    session = start_capture(controller)
     monkeypatch.setattr(app.ocr, "preprocess", lambda *a: 1 / 0)
 
-    session.windows[0].selected.emit(Rect(10, 10, 200, 50))
+    select(session, grabber, shot)
 
     assert session.closed and all(not w.isVisible() for w in session.windows)
     assert controller.state == controller.IDLE
@@ -175,25 +204,34 @@ def test_exception_mid_capture_closes_overlays_and_next_trigger_works(rig, shot,
     assert clipboard == []
 
     monkeypatch.undo()
-    start_capture(controller, grabber, shot)
-    assert grabber.calls == 2 and controller.state == controller.SELECTING
+    start_capture(controller)
+    assert controller.state == controller.SELECTING
 
 
-def test_exception_while_showing_overlay(rig, shot, monkeypatch):
+def test_exception_while_showing_overlay(rig, monkeypatch):
     controller, grabber, notifier, *_ = rig
     monkeypatch.setattr(TrackingSession, "show", lambda self: 1 / 0)
     controller.trigger()
     pump()
-    grabber.grabbed.emit([shot])
     session = TrackingSession.instances[-1]
     assert session.closed and controller.state == controller.IDLE
     assert summaries(notifier) == ["'Capture failed'"]
 
 
+def test_cancel_before_the_grab(rig):
+    controller, grabber, notifier, clipboard, _ = rig
+    session = start_capture(controller)
+    session.windows[0].selected.emit(Rect(10, 10, 200, 50))
+    session.cancel()
+    pump(app.GRAB_SETTLE_MS + 50)
+    assert grabber.calls == 0 and controller.state == controller.IDLE
+    assert clipboard == [] and notifier.sent == []
+
+
 def test_cancel_during_recognition(rig, shot):
     controller, grabber, notifier, clipboard, _ = rig
-    session = start_capture(controller, grabber, shot)
-    session.windows[0].selected.emit(Rect(10, 10, 200, 50))
+    session = start_capture(controller)
+    select(session, grabber, shot)
     job = FakeJob.instances[-1]
     session.cancel()
     assert job.cancelled and clipboard == [] and controller.state == controller.IDLE
@@ -203,19 +241,19 @@ def test_cancel_during_recognition(rig, shot):
 
 def test_ocr_failure_is_reported(rig, shot):
     controller, grabber, notifier, clipboard, _ = rig
-    session = start_capture(controller, grabber, shot)
-    session.windows[0].selected.emit(Rect(10, 10, 200, 50))
+    session = start_capture(controller)
+    select(session, grabber, shot)
     FakeJob.instances[-1].failed.emit(ocr.TIMEOUT, "Recognition took too long and was stopped.")
     assert session.closed and clipboard == []
     assert summaries(notifier) == ["'Recognition timed out'"]
 
 
-def test_missing_engine_reported_without_grabbing(rig):
+def test_missing_engine_reported_without_overlay(rig):
     controller, grabber, notifier, *_ = rig
     controller.engine_installed = lambda: False
     controller.trigger()
     pump()
-    assert grabber.calls == 0 and controller.state == controller.IDLE
+    assert grabber.calls == 0 and TrackingSession.instances == [] and controller.state == controller.IDLE
     assert summaries(notifier) == ["'OCR engine not installed'"]
     assert "tesseract-ocr" in notifier.sent[0][-4]
 
@@ -224,43 +262,73 @@ def test_language_fallback_warned_once(rig, shot, store):
     controller, grabber, notifier, *_ = rig
     store.set(settings.LANGUAGE, "fra")
     for _ in range(2):
-        session = start_capture(controller, grabber, shot)
-        session.windows[0].selected.emit(Rect(10, 10, 200, 50))
+        session = start_capture(controller)
+        select(session, grabber, shot)
         assert FakeJob.instances[-1].language == "eng"
         controller.finish()
     assert summaries(notifier) == ["'OCR language not available'"]
 
 
-def test_grab_error_is_reported(rig):
-    controller, grabber, notifier, *_ = rig
-    controller.trigger()
-    pump()
+def test_grab_error_is_reported(rig, shot):
+    controller, grabber, notifier, clipboard, _ = rig
+    session = start_capture(controller)
+    session.windows[0].selected.emit(Rect(10, 10, 200, 50))
+    pump(app.GRAB_SETTLE_MS + 50)
     grabber.failed.emit(grab.ERROR, "Ubuntu did not provide a screenshot.")
-    assert controller.state == controller.IDLE
+    assert session.closed and controller.state == controller.IDLE and clipboard == []
     assert summaries(notifier) == ["'Capture failed'"]
 
 
 # --- 4.7 permission flow decisions -------------------------------------------------------
 
 
-def test_permission_needed_then_granted_starts_capture(rig):
-    controller, grabber, notifier, *_ = rig
+def start_unpermitted(controller, grabber):
+    """Wayland with no stored permission: a check grab runs before any overlay."""
+    grabber.permission_stored = False
     controller.trigger()
     pump()
+    assert controller.state == controller.CHECKING and grabber.calls == 1
+    assert TrackingSession.instances == []
+
+
+def test_check_grab_success_opens_the_overlay(rig, shot):
+    controller, grabber, *_ = rig
+    start_unpermitted(controller, grabber)
+    grabber.grabbed.emit([shot])  # allowed after all: the check image is discarded
+    session = TrackingSession.instances[-1]
+    assert controller.state == controller.SELECTING and session.windows[0].isVisible()
+    select(session, grabber, shot)
+    assert controller.state == controller.RECOGNIZING
+
+
+def test_permission_needed_then_granted_starts_capture(rig):
+    controller, grabber, notifier, *_ = rig
+    start_unpermitted(controller, grabber)
     grabber.failed.emit(grab.PERMISSION_NEEDED, "")
     flow = FakePermission.instances[-1]
     assert flow.started and not flow.denied_before and controller.state == controller.PERMISSION
 
+    grabber.permission_stored = True  # Ubuntu stores the Allow
     flow.granted.emit()
     pump(app.PERMISSION_CAPTURE_DELAY_MS + 100)
-    assert grabber.calls == 2 and controller.state == controller.GRABBING
-    assert notifier.sent == []
+    assert controller.state == controller.SELECTING and len(TrackingSession.instances) == 1
+    assert grabber.calls == 1 and notifier.sent == []
+
+
+def test_permission_withdrawn_after_selection_asks_again(rig):
+    controller, grabber, notifier, clipboard, _ = rig
+    session = start_capture(controller)
+    session.windows[0].selected.emit(Rect(10, 10, 200, 50))
+    pump(app.GRAB_SETTLE_MS + 50)
+    grabber.failed.emit(grab.PERMISSION_DENIED, "")
+    flow = FakePermission.instances[-1]
+    assert session.closed and flow.started and flow.denied_before
+    assert controller.state == controller.PERMISSION and clipboard == []
 
 
 def test_permission_denied_is_reported(rig):
     controller, grabber, notifier, *_ = rig
-    controller.trigger()
-    pump()
+    start_unpermitted(controller, grabber)
     grabber.failed.emit(grab.PERMISSION_DENIED, "")
     flow = FakePermission.instances[-1]
     assert flow.denied_before
@@ -271,8 +339,7 @@ def test_permission_denied_is_reported(rig):
 
 def test_permission_cancel_does_nothing(rig):
     controller, grabber, notifier, clipboard, _ = rig
-    controller.trigger()
-    pump()
+    start_unpermitted(controller, grabber)
     grabber.failed.emit(grab.PERMISSION_NEEDED, "")
     FakePermission.instances[-1].cancelled.emit()
     assert controller.state == controller.IDLE and notifier.sent == [] and clipboard == []

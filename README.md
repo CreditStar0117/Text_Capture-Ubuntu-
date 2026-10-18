@@ -9,7 +9,7 @@ It runs quietly in the background and never pauses, freezes or steals focus from
 ## Features
 
 - **Global hotkey:** `Ctrl+Q` by default. It works in any app, and you can change it in Settings.
-- **Region capture:** the screen freezes and you drag a rectangle over the text you want. `Esc` or right-click cancels.
+- **Region capture:** drag a rectangle over the text you want. Nothing on the screen freezes: videos and animations keep playing while you select. `Esc` or right-click cancels.
 - **OCR** with [Tesseract](https://github.com/tesseract-ocr/tesseract), in any language you have installed.
 - **Copy to clipboard:** paste the text anywhere with `Ctrl+V`. If no text is found, your clipboard is left as it was.
 - **Tray icon** with a menu for language and settings.
@@ -76,9 +76,9 @@ Open **Text Capture** from the app grid, or run `text-capture --background`. No 
 
 ## Usage
 
-1. Press **`Ctrl+Q`**. The screen freezes and dims. Your apps keep running underneath.
+1. Press **`Ctrl+Q`**. The screen dims slightly and the pointer becomes a crosshair. Nothing freezes: a playing video keeps playing, and you see it move.
 2. **Drag** a rectangle around the text you want. Its size in pixels is shown while you drag.
-3. Release the mouse button. "Recognizing…" appears for a moment. Then the text is copied to the clipboard, the screen returns to normal, and a short notification shows the start of the text.
+3. Release the mouse button. Text Capture reads the area as it looks at that moment, and "Recognizing…" appears briefly. Then the text is copied to the clipboard, the dimming goes away, and a short notification shows the start of the text.
 4. **Paste** with `Ctrl+V` wherever you need it. The keyboard is back in the app you were using.
 
 Press `Esc` or right-click to cancel, even while "Recognizing…" is shown. If nothing is selected within 60 seconds, the capture cancels itself. A plain click or a tiny drag is ignored, so you can just drag again.

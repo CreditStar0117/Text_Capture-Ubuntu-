@@ -5,22 +5,18 @@ from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtGui import QColor, QGuiApplication, QImage, QKeyEvent, QMouseEvent
 from PyQt6.QtWidgets import QApplication
 
-from text_capture.grab import Rect, ScreenShot
-from text_capture.overlay import OverlaySession
+from text_capture.grab import Rect
+from text_capture.overlay import ACCENT, DIM, OverlaySession
 
 
 @pytest.fixture
-def shot(qapp):
-    screen = QGuiApplication.primaryScreen()
-    g = screen.geometry()
-    image = QImage(g.width(), g.height(), QImage.Format.Format_RGB32)
-    image.fill(QColor("white"))
-    return ScreenShot(screen, image)
+def screen(qapp):
+    return QGuiApplication.primaryScreen()
 
 
 @pytest.fixture
-def session(shot):
-    s = OverlaySession([shot])
+def session(screen):
+    s = OverlaySession([screen])
     s.show()
     QApplication.processEvents()
     yield s
@@ -62,22 +58,23 @@ def record(session):
 # --- 5.1 windows and painting ------------------------------------------------------------
 
 
-def test_one_window_per_screen_shot(shot):
-    s = OverlaySession([shot, shot])
+def test_one_window_per_screen(screen):
+    s = OverlaySession([screen, screen])
     s.show()
     try:
         assert len(s.windows) == 2
         assert all(w.isVisible() and w.isFullScreen() for w in s.windows)
-        assert all(w.screen() is shot.screen for w in s.windows)
+        assert all(w.screen() is screen for w in s.windows)
     finally:
         s.close()
 
 
-def test_frozen_image_is_dimmed(session, shot):
+def test_overlay_dims_the_live_screen_without_hiding_it(session):
     window = session.windows[0]
+    assert window.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     painted = window.grab().toImage()
     center = painted.pixelColor(window.width() // 2, window.height() // 2)
-    assert center.lightness() < 200  # white source, dimmed
+    assert center == DIM  # translucent: apps underneath stay visible and keep moving
     assert window.cursor().shape() == Qt.CursorShape.CrossCursor
 
 
@@ -91,10 +88,49 @@ def test_drag_selects_rectangle_and_shows_it_undimmed(session):
 
     assert events == [("selected", 0, Rect(100, 100, 200, 100))]
     painted = window.grab().toImage()
-    assert painted.pixelColor(200, 150) == QColor("white")  # inside: undimmed
-    assert painted.pixelColor(50, 50).lightness() < 200  # outside: dimmed
-    crop = session.crop(0, Rect(100, 100, 200, 100))
-    assert (crop.width(), crop.height()) == (200, 100)
+    assert painted.pixelColor(50, 50) == DIM  # outside: dimmed
+    # Inside, and a margin around it, is fully transparent, so a grab there reads the
+    # screen itself; the border is drawn outside that margin.
+    for x in (98, 100, 200, 299, 301):
+        assert painted.pixelColor(x, 150).alpha() == 0, x
+    assert painted.pixelColor(97, 150) == ACCENT and painted.pixelColor(302, 150) == ACCENT
+    assert painted.pixelColor(200, 97) == ACCENT and painted.pixelColor(200, 202) == ACCENT
+
+
+def test_crop_maps_the_selection_to_the_grabbed_image(session):
+    window = session.windows[0]
+    image = QImage(window.width() * 2, window.height() * 2, QImage.Format.Format_RGB32)  # a 200% screen
+    image.fill(QColor("white"))
+    crop = session.crop(0, Rect(100, 100, 200, 100), image)
+    assert (crop.width(), crop.height()) == (400, 200)
+
+
+def test_size_label_while_dragging_is_hidden_once_the_selection_is_made(session):
+    window = session.windows[0]
+    mouse(window, "press", 100, 100)
+    mouse(window, "move", 300, 200)
+    assert window.grab().toImage().pixelColor(100, 80).alpha() > DIM.alpha()  # "200 × 100" above the selection
+
+    mouse(window, "release", 300, 200)
+    painted = window.grab().toImage()
+    assert painted.pixelColor(100, 80) == DIM  # nothing of ours near the area about to be grabbed
+    assert painted.pixelColor(200, 150).alpha() == 0
+    assert window.cursor().shape() == Qt.CursorShape.BusyCursor
+
+
+def test_input_is_ignored_while_the_selection_is_grabbed(screen):
+    s = OverlaySession([screen, screen])
+    events = record(s)
+    s.show()
+    try:
+        drag(s.windows[0], 100, 100, 300, 200)
+        drag(s.windows[1], 10, 10, 90, 90)  # another monitor
+        drag(s.windows[0], 10, 10, 90, 90)
+        mouse(s.windows[0], "press", 50, 50, Qt.MouseButton.RightButton)
+        assert events == [("selected", 0, Rect(100, 100, 200, 100))]
+        assert not s.closed
+    finally:
+        s.close()
 
 
 @pytest.mark.parametrize("dx, dy", [(0, 0), (3, 40), (40, 3)])
@@ -132,8 +168,8 @@ def test_right_click_cancels(session):
     assert events == [("cancelled",)]
 
 
-def test_inactivity_timeout_cancels(shot):
-    s = OverlaySession([shot], timeout_ms=100)
+def test_inactivity_timeout_cancels(screen):
+    s = OverlaySession([screen], timeout_ms=100)
     events = record(s)
     s.show()
     deadline = time.monotonic() + 3
@@ -144,8 +180,8 @@ def test_inactivity_timeout_cancels(shot):
     assert s.closed
 
 
-def test_activity_restarts_the_timeout(shot):
-    s = OverlaySession([shot], timeout_ms=300)
+def test_activity_restarts_the_timeout(screen):
+    s = OverlaySession([screen], timeout_ms=300)
     events = record(s)
     s.show()
     try:

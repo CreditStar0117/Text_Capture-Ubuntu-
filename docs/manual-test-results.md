@@ -10,8 +10,8 @@ Status values: **Pass**, **Fail** (with a note), **To do**, or **Not testable** 
 |---|---|---|---|
 | Shortcut starts a capture (capture-hotkey) | To do | To do | Needs a free key. On the dev machine `Ctrl+Q` belongs to NormCap, so the entry was created unbound, as specified. |
 | `text-capture --capture` starts a capture | Pass | To do | 2026-10-18: the overlay opened on both monitors. |
-| Overlay shows the frozen screen on every monitor | Pass | To do | 2026-10-18: one full-screen window per monitor, at (0,0) and (1920,0). |
-| Drag selects; the text reaches the clipboard | Pass | To do | 2026-10-18: drag → OCR → clipboard ran end to end. The test text was covered by other windows, so the visible text was read instead. Repeat by hand with visible text. |
+| Overlay dims the live screen on every monitor; nothing freezes | Pass (scripted) | To do | 2026-10-18: one full-screen window per monitor, at (0,0) and (1920,0). After the switch to the see-through overlay, a separate app's counter ticking every 30 ms kept changing under the overlay, was dimmed by it, and the overlay was the top window. |
+| Drag selects; the text reaches the clipboard | Pass | To do | 2026-10-18: drag → OCR → clipboard ran end to end. The test text was covered by other windows, so the visible text was read instead. Repeat by hand with visible text. See-through overlay, scripted drag (Qt events): text that changed from "BEFORE" to "AFTER 77" after the trigger was copied as "AFTER 77". |
 | Click or tiny drag is ignored | Pass (automated) | To do | `tests/test_overlay.py` |
 | `Esc` cancels; clipboard unchanged | Pass | To do | 2026-10-18: clipboard stayed `before-cancel`; no overlay windows left. |
 | Right-click cancels | Pass (automated) | To do | `tests/test_overlay.py` |

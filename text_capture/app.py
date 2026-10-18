@@ -10,7 +10,7 @@ import sys
 import time
 
 from PyQt6.QtCore import QObject, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QActionGroup, QFont
+from PyQt6.QtGui import QActionGroup, QFont, QGuiApplication
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLabel, QMenu, QPushButton, QSystemTrayIcon, QVBoxLayout, QWidget
 
 from . import APP_DESKTOP_ID, APP_ID, APP_NAME, gnome_hotkey, grab, icons, ipc, ocr, output, settings
@@ -19,9 +19,10 @@ from .settings import Settings
 
 log = logging.getLogger("text_capture")
 
-TRAY_CAPTURE_DELAY_MS = 250  # let the tray menu close so it is not in the frozen image
-PERMISSION_CAPTURE_DELAY_MS = 300  # let the permission window close before grabbing
+TRAY_CAPTURE_DELAY_MS = 250  # let the tray menu close before the overlay opens
+PERMISSION_CAPTURE_DELAY_MS = 300  # let the permission window close before the overlay opens
 PERMISSION_TIMEOUT_MS = 120_000  # the user is reading Ubuntu's Allow/Deny dialog
+GRAB_SETTLE_MS = 80  # let the compositor show the finished selection, without labels, before grabbing
 
 
 def guarded(method):
@@ -160,9 +161,10 @@ class PermissionFlow(QObject):
 
 
 class CaptureController(QObject):
-    """grab -> overlay -> OCR -> clipboard -> close, one capture at a time (design D5-D7)."""
+    """overlay -> selection -> grab -> OCR -> clipboard -> close, one capture at a time (design D4-D7)."""
 
-    IDLE, GRABBING, PERMISSION, SELECTING, RECOGNIZING = "idle", "grabbing", "permission", "selecting", "recognizing"
+    IDLE, STARTING, CHECKING, PERMISSION = "idle", "starting", "checking", "permission"
+    SELECTING, GRABBING, RECOGNIZING = "selecting", "grabbing", "recognizing"
     state_changed = pyqtSignal(str)
 
     def __init__(self, store: Settings, notifier, grabber=None, *, overlay_factory=OverlaySession, ocr_factory=ocr.OcrJob,
@@ -182,6 +184,7 @@ class CaptureController(QObject):
         self.permission_factory = permission_factory
         self.state = self.IDLE
         self.session = None
+        self.selection = None  # (screen index, Rect) of the finished drag
         self.job = None
         self.permission = None
         self._language_warned = False
@@ -198,35 +201,44 @@ class CaptureController(QObject):
         if self.busy:
             log.info("Capture already in progress (%s); trigger ignored", self.state)
             return
-        self._set(self.GRABBING)
+        self._set(self.STARTING)
         QTimer.singleShot(delay_ms, self._start)
 
     @guarded
     def _start(self):
-        if self.state != self.GRABBING:
+        if self.state != self.STARTING:
             return
         if not self.engine_installed():
             self.finish()
             self.notifier.message("OCR engine not installed",
                                   f"Install it with: sudo apt install {ocr.ENGINE_PACKAGE} tesseract-ocr-eng")
             return
-        self.grabber.grab()
+        if self.grabber.allowed():
+            self._open_overlay()
+        else:  # Wayland with no stored permission: a first grab shows whether Ubuntu must ask
+            self._set(self.CHECKING)
+            self.grabber.grab()
 
-    @guarded
-    def _on_grabbed(self, shots):
-        if self.state != self.GRABBING:
-            return
-        self.session = self.overlay_factory(shots)
+    def _open_overlay(self):
+        self.session = self.overlay_factory(QGuiApplication.screens())
         self.session.selected.connect(self._on_selected)
         self.session.cancelled.connect(self.finish)
         self._set(self.SELECTING)
         self.session.show()
 
     @guarded
+    def _on_grabbed(self, shots):
+        if self.state == self.CHECKING:
+            self._open_overlay()  # the check grab is only discarded
+        elif self.state == self.GRABBING:
+            self._recognize(shots)
+
+    @guarded
     def _on_grab_failed(self, kind: str, message: str):
-        if self.state != self.GRABBING:
+        if self.state not in (self.CHECKING, self.GRABBING):
             return
         if kind in (grab.PERMISSION_NEEDED, grab.PERMISSION_DENIED):
+            self._close_overlay()
             self._set(self.PERMISSION)
             self.permission = self.permission_factory(denied_before=kind == grab.PERMISSION_DENIED, parent=self)
             self.permission.granted.connect(self._on_permission_granted)
@@ -249,9 +261,24 @@ class CaptureController(QObject):
     def _on_selected(self, index: int, rect):
         if self.state != self.SELECTING:
             return
+        self.selection = (index, rect)
+        self._set(self.GRABBING)
+        QTimer.singleShot(GRAB_SETTLE_MS, self._grab)
+
+    @guarded
+    def _grab(self):
+        if self.state == self.GRABBING:
+            self.grabber.grab()
+
+    def _recognize(self, shots):
+        index, rect = self.selection
         window = self.session.windows[index]
-        image = self.session.crop(index, rect)
-        scale = window.shot.image.width() / max(window.width(), 1)
+        shot = next((s for s in shots if s.screen is window.target_screen), None)
+        if shot is None:
+            self._fail("Capture failed", "The screen could not be captured.")
+            return
+        image = self.session.crop(index, rect, shot.image)
+        scale = shot.image.width() / max(window.width(), 1)
         selected = self.store.get(settings.LANGUAGE)
         language, fell_back = ocr.resolve_language(selected, self.languages())
         if fell_back and not self._language_warned:
@@ -291,22 +318,26 @@ class CaptureController(QObject):
     def finish(self):
         """Close everything this capture opened and return to idle. Safe to call twice."""
         job, self.job = self.job, None
-        session, self.session = self.session, None
         permission, self.permission = self.permission, None
+        self.selection = None
         try:
             if job is not None:
                 job.cancel()
                 job.deleteLater()
         finally:
             try:
-                if session is not None:
-                    session.close()
-                    session.deleteLater()
+                self._close_overlay()
             finally:
                 if permission is not None:
                     permission.close()
                     permission.deleteLater()
                 self._set(self.IDLE)
+
+    def _close_overlay(self):
+        session, self.session = self.session, None
+        if session is not None:
+            session.close()
+            session.deleteLater()
 
     def abort(self):
         try:

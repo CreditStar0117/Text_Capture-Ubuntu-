@@ -1,8 +1,10 @@
 """Screen grabbing: X11 grabber and xdg-desktop-portal grabber (design D4).
 
 Both grabbers emit `grabbed(list[ScreenShot])` with one image per monitor in that
-monitor's physical pixels, or `failed(kind, message)`. The whole desktop is grabbed
-before any overlay exists, so the overlay never appears in its own image.
+monitor's physical pixels, or `failed(kind, message)`. The desktop is grabbed once the
+user has finished a selection, while the see-through overlay is still open: the overlay
+is fully transparent over the selection, so the pixels cropped from there are the
+screen's own.
 """
 
 import argparse
@@ -114,6 +116,10 @@ def split_desktop(image: QImage, screens: list[QScreen]) -> list[ScreenShot]:
 class X11Grabber(QObject):
     grabbed = pyqtSignal(list)
     failed = pyqtSignal(str, str)
+
+    def allowed(self) -> bool:
+        """True when a grab works without asking the user first."""
+        return True
 
     def grab(self):
         shots = []
@@ -235,6 +241,10 @@ def classify_failure(response: int, permission: str | None) -> str:
 class PortalGrabber(QObject):
     grabbed = pyqtSignal(list)
     failed = pyqtSignal(str, str)
+
+    def allowed(self) -> bool:
+        """True when Ubuntu has stored "yes" for our screenshots; otherwise a grab may need permission."""
+        return screenshot_permission() == "yes"
 
     def grab(self):
         self._request = PortalScreenshot(parent=self)
