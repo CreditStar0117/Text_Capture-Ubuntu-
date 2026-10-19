@@ -1,9 +1,9 @@
 """Per-monitor see-through overlay windows for region selection (design D5).
 
-The overlay never shows a screenshot: it is a translucent window that dims the live
-screen, so videos and animations keep moving while the user drags. The selection is a
-fully transparent hole, so a grab taken while the overlay is open reads the screen's own
-pixels there. Wayland cannot position one window across monitors, so there is one
+The overlay never shows a screenshot: it is a see-through window that leaves the live
+screen looking as it is, so videos and animations keep moving while the user drags. The
+selection is a fully transparent hole with a black-and-white dashed edge, so a grab taken
+while the overlay is open reads the screen's own pixels there. Wayland cannot position one window across monitors, so there is one
 full-screen window per screen. A selection therefore stays on the monitor where the drag
 started.
 """
@@ -17,8 +17,8 @@ from .grab import Rect, selection_to_crop
 MIN_SELECTION = 4  # logical pixels; smaller drags are treated as accidental clicks
 TIMEOUT_MS = 60_000
 HOLE_MARGIN = 2  # logical pixels of clear space between the selection and its border
-DIM = QColor(0, 0, 0, 110)
-ACCENT = QColor("#3584e4")
+CLEAR = QColor(0, 0, 0, 1)  # looks clear; alpha 0 can let clicks fall through to the app below
+EDGE_LIGHT, EDGE_DARK = QColor("white"), QColor("black")  # dashed, so it shows on any background
 LABEL_BG = QColor(0, 0, 0, 190)
 
 # Window modes. CAPTURING lasts from the end of a drag until the screen has been grabbed:
@@ -112,15 +112,20 @@ class OverlayWindow(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.fillRect(self.rect(), DIM)
+        painter.fillRect(self.rect(), CLEAR)
         sel = self.selection()
         if sel is not None and sel.width() > 0 and sel.height() > 0:
             # Clear past the selection so the crop's rounded edges stay clear too.
             hole = sel.adjusted(-HOLE_MARGIN, -HOLE_MARGIN, HOLE_MARGIN, HOLE_MARGIN)
             painter.fillRect(hole, Qt.GlobalColor.transparent)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-            painter.setPen(QPen(ACCENT, 1))
-            painter.drawRect(hole.adjusted(-1, -1, 0, 0))  # just outside the hole
+            edge = hole.adjusted(-1, -1, 0, 0)  # just outside the hole
+            painter.setPen(QPen(EDGE_LIGHT, 1))
+            painter.drawRect(edge)
+            dashes = QPen(EDGE_DARK, 1)
+            dashes.setDashPattern([4, 4])
+            painter.setPen(dashes)
+            painter.drawRect(edge)
             if self._mode == SELECTING:
                 self._draw_label(painter, "{} × {}".format(*self.pixel_size(sel)), hole.adjusted(-1, -1, 1, 1))
             elif self._mode == BUSY:

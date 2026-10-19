@@ -7,11 +7,11 @@ Lets the user mark the exact area of the screen whose text they want, and turns 
 ## ADDED Requirements
 
 ### Requirement: The screen stays live during capture
-When a capture starts, the system SHALL cover every monitor with a slightly dimmed, see-through overlay. The system SHALL NOT freeze the screen or replace it with a still image: other apps SHALL keep running, and their changes, such as a playing video, SHALL stay visible through the overlay. The selected area SHALL be read from the screen when the user releases the mouse button.
+When a capture starts, the system SHALL cover every monitor with a see-through overlay that does not tint or dim the screen. The system SHALL NOT freeze the screen or replace it with a still image: other apps SHALL keep running, and their changes, such as a playing video, SHALL stay visible through the overlay. The selected area SHALL be read from the screen when the user releases the mouse button.
 
-#### Scenario: Overlay dims the live screen
+#### Scenario: Overlay leaves the live screen untinted
 - **WHEN** the user triggers a capture
-- **THEN** each monitor is slightly dimmed and still shows its live contents
+- **THEN** each monitor still shows its live contents in their normal colours, without dimming
 
 #### Scenario: Apps keep moving during capture
 - **WHEN** a video is playing and the user triggers a capture, waits five seconds, then cancels
@@ -23,14 +23,14 @@ When a capture starts, the system SHALL cover every monitor with a slightly dimm
 
 #### Scenario: The overlay is not in the captured image
 - **WHEN** the user completes a selection
-- **THEN** the captured image shows the screen's own pixels, without the overlay's dimming, border or labels
+- **THEN** the captured image shows the screen's own pixels, without the overlay's border or labels
 
 ### Requirement: User selects a rectangle by dragging
-The user SHALL select a region by pressing the left mouse button and dragging. While dragging, the selected rectangle SHALL be shown undimmed with a visible border and its size in pixels. Releasing the button SHALL complete the selection.
+The user SHALL select a region by pressing the left mouse button and dragging. While dragging, the selected rectangle SHALL be shown with a black-and-white dashed border, visible on light and dark backgrounds, and its size in pixels. Releasing the button SHALL complete the selection.
 
 #### Scenario: Drag and release
 - **WHEN** the user drags from one corner of a paragraph to the opposite corner and releases
-- **THEN** the overlay shows the rectangle undimmed while dragging
+- **THEN** the overlay shows the rectangle's dashed border while dragging
 - **AND** releasing the button sends exactly that rectangle to recognition
 
 #### Scenario: Accidental click or tiny drag

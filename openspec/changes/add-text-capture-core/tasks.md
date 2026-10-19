@@ -36,6 +36,7 @@
 - [x] 5.3 Add cancellation (`Esc`, right-click, 60 s inactivity timer) and a "Recognizing…" state that keeps the overlay open until told to close. Verify with QTest tests for each cancel path (timer shortened by a test hook), and that `Esc` during "Recognizing…" emits cancel.
 - [ ] 5.4 Verify focus return by hand in both sessions: type in gedit, capture, then keep typing. The keystrokes land in gedit after both a completed and a cancelled capture.
 - [x] 5.5 Replace the frozen-image overlay with a see-through one (design D4, D5): no grab before the overlay opens, the selection is a transparent hole with the border and label outside it, and the desktop is grabbed after the release. Verify with offscreen tests (transparent hole, border outside it, label hidden and input ignored during the grab, grab only after the selection, Wayland check grab), and on the Xorg dev machine that a window ticking every 30 ms keeps updating under the overlay and that text changed after the trigger is read as it is at release.
+- [x] 5.6 Remove the overlay's colours: no grey dimming (alpha 1, so input still reaches the window) and a black-and-white dashed border instead of the blue one. Verify with offscreen tests (untinted outside the hole, border pixels only black or white) and a rendered preview on light and dark backgrounds.
 
 ## 6. Text recognition
 
