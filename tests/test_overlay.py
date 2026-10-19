@@ -6,7 +6,7 @@ from PyQt6.QtGui import QColor, QGuiApplication, QImage, QKeyEvent, QMouseEvent
 from PyQt6.QtWidgets import QApplication
 
 from text_capture.grab import Rect
-from text_capture.overlay import ACCENT, DIM, OverlaySession
+from text_capture.overlay import CLEAR, EDGE_DARK, EDGE_LIGHT, OverlaySession
 
 
 @pytest.fixture
@@ -69,32 +69,33 @@ def test_one_window_per_screen(screen):
         s.close()
 
 
-def test_overlay_dims_the_live_screen_without_hiding_it(session):
+def test_overlay_leaves_the_live_screen_uncolored(session):
     window = session.windows[0]
     assert window.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     painted = window.grab().toImage()
     center = painted.pixelColor(window.width() // 2, window.height() // 2)
-    assert center == DIM  # translucent: apps underneath stay visible and keep moving
+    assert center == CLEAR and center.alpha() <= 1  # no tint: apps underneath look as they are
     assert window.cursor().shape() == Qt.CursorShape.CrossCursor
 
 
 # --- 5.2 selection ----------------------------------------------------------------------------
 
 
-def test_drag_selects_rectangle_and_shows_it_undimmed(session):
+def test_drag_selects_rectangle_and_shows_it_with_a_dashed_edge(session):
     events = record(session)
     window = session.windows[0]
     drag(window, 300, 200, 100, 100)  # dragging up-left works too
 
     assert events == [("selected", 0, Rect(100, 100, 200, 100))]
     painted = window.grab().toImage()
-    assert painted.pixelColor(50, 50) == DIM  # outside: dimmed
+    assert painted.pixelColor(50, 50) == CLEAR  # outside: untinted
     # Inside, and a margin around it, is fully transparent, so a grab there reads the
-    # screen itself; the border is drawn outside that margin.
+    # screen itself; the edge is drawn outside that margin.
     for x in (98, 100, 200, 299, 301):
         assert painted.pixelColor(x, 150).alpha() == 0, x
-    assert painted.pixelColor(97, 150) == ACCENT and painted.pixelColor(302, 150) == ACCENT
-    assert painted.pixelColor(200, 97) == ACCENT and painted.pixelColor(200, 202) == ACCENT
+    edge = [painted.pixelColor(x, 97) for x in range(97, 303)] + [painted.pixelColor(x, 202) for x in range(97, 303)]
+    edge += [painted.pixelColor(97, y) for y in range(97, 203)] + [painted.pixelColor(302, y) for y in range(97, 203)]
+    assert {c.rgba() for c in edge} == {EDGE_LIGHT.rgba(), EDGE_DARK.rgba()}  # dashed, black and white only
 
 
 def test_crop_maps_the_selection_to_the_grabbed_image(session):
@@ -109,11 +110,11 @@ def test_size_label_while_dragging_is_hidden_once_the_selection_is_made(session)
     window = session.windows[0]
     mouse(window, "press", 100, 100)
     mouse(window, "move", 300, 200)
-    assert window.grab().toImage().pixelColor(100, 80).alpha() > DIM.alpha()  # "200 × 100" above the selection
+    assert window.grab().toImage().pixelColor(100, 80).alpha() > CLEAR.alpha()  # "200 × 100" above the selection
 
     mouse(window, "release", 300, 200)
     painted = window.grab().toImage()
-    assert painted.pixelColor(100, 80) == DIM  # nothing of ours near the area about to be grabbed
+    assert painted.pixelColor(100, 80) == CLEAR  # nothing of ours near the area about to be grabbed
     assert painted.pixelColor(200, 150).alpha() == 0
     assert window.cursor().shape() == Qt.CursorShape.BusyCursor
 

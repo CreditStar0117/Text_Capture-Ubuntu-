@@ -8,7 +8,7 @@ Capture2Text is a popular Windows tool: press a hotkey, drag a box around any te
 
 - Add a background app, **Text Capture**, that starts at login, shows a tray icon, and stays idle until the user triggers a capture.
 - Add a global capture hotkey (default `Ctrl+Q`; Capture2Text's `Win+Q` equivalent, `Super+Q`, is already taken by Ubuntu Dock). It works in both X11 and Wayland sessions on GNOME 46, the desktop in Ubuntu 24.04.
-- Add region capture. The hotkey opens a dimmed, see-through overlay over the live screen (nothing freezes), the user drags a rectangle (Esc cancels), and the pixels under it are captured when the button is released.
+- Add region capture. The hotkey opens a see-through overlay over the live screen (nothing freezes), the user drags a rectangle (Esc cancels), and the pixels under it are captured when the button is released.
 - Add OCR of the captured region using Tesseract, with a choice of language from the language packs installed on the system.
 - Copy recognized text to the clipboard and show a short desktop notification. Never overwrite the clipboard when no text is found.
 - Add a tray menu: Capture, OCR language, Keep line breaks, Show notifications, Start at login, Quit.

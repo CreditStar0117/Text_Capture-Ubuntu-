@@ -76,9 +76,9 @@ Open **Text Capture** from the app grid, or run `text-capture --background`. No 
 
 ## Usage
 
-1. Press **`Ctrl+Q`**. The screen dims slightly and the pointer becomes a crosshair. Nothing freezes: a playing video keeps playing, and you see it move.
-2. **Drag** a rectangle around the text you want. Its size in pixels is shown while you drag.
-3. Release the mouse button. Text Capture reads the area as it looks at that moment, and "Recognizing…" appears briefly. Then the text is copied to the clipboard, the dimming goes away, and a short notification shows the start of the text.
+1. Press **`Ctrl+Q`**. The pointer becomes a crosshair. The screen keeps its normal look and nothing freezes: a playing video keeps playing, and you see it move.
+2. **Drag** a rectangle around the text you want. A black-and-white dashed line marks it, and its size in pixels is shown while you drag.
+3. Release the mouse button. Text Capture reads the area as it looks at that moment, and "Recognizing…" appears briefly. Then the text is copied to the clipboard, the crosshair goes away, and a short notification shows the start of the text.
 4. **Paste** with `Ctrl+V` wherever you need it. The keyboard is back in the app you were using.
 
 Press `Esc` or right-click to cancel, even while "Recognizing…" is shown. If nothing is selected within 60 seconds, the capture cancels itself. A plain click or a tiny drag is ignored, so you can just drag again.
